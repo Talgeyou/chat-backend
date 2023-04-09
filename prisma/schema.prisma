@@ -55,8 +55,9 @@ model VerificationToken {
 }
 
 model Message {
-  id     String @id @default(cuid())
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
-  body   String
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  body      String
+  createdAt DateTime
 }
