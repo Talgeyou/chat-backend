@@ -13,10 +13,12 @@ import { Socket, Server } from 'socket.io';
 import { NextAuthStrategy } from 'src/auth/next-auth-strategy.strategy';
 import { MessageCreateDTO, MessageWithUser } from 'src/messages/types';
 import { MessagesService } from 'src/messages/messages.service';
+import { UsersService } from 'src/users/users.service';
+import { User } from '@prisma/client';
 
 config();
 
-const users: Record<string, string> = {};
+const users: Record<string, User> = {};
 
 @UseGuards(NextAuthStrategy)
 @WebSocketGateway({
@@ -29,27 +31,41 @@ export class ChatGateway
 {
   @WebSocketServer() server: Server;
 
-  constructor(private messagesService: MessagesService) {}
+  constructor(
+    private messagesService: MessagesService,
+    private usersService: UsersService,
+  ) {}
 
   afterInit(server: Server) {
     console.log('[LOG] Websocket server has been initialized', { server });
   }
 
-  handleConnection(client: Socket) {
-    const userName = client.handshake.query.userName as string;
+  async handleConnection(client: Socket) {
+    const userId = client.handshake.query.userId;
     const socketId = client.id;
-    users[socketId] = userName;
 
-    // передаем информацию всем клиентам, кроме текущего
-    client.broadcast.emit('log', `${userName} connected`);
+    if (typeof userId === 'string') {
+      const user = await this.usersService.getOneById(userId);
+
+      users[socketId] = user;
+
+      client.broadcast.emit('users:connect', user);
+
+      client.emit('users:get', Object.values(users));
+      client.emit('messages:get', await this.messagesService.getMessages());
+
+      client.broadcast.emit('log', `${user.name} connected`);
+    }
   }
 
   handleDisconnect(client: Socket) {
     const socketId = client.id;
-    const userName = users[socketId];
-    delete users[socketId];
+    const user = users[socketId];
 
-    client.broadcast.emit('log', `${userName} disconnected`);
+    client.broadcast.emit('users:disconnect', user);
+    client.broadcast.emit('log', `${user.name} disconnected`);
+
+    delete users[socketId];
   }
 
   @SubscribeMessage('messages:post')
@@ -62,7 +78,7 @@ export class ChatGateway
       return createdMessage;
     } catch (e) {
       console.log(e);
-      this.server.emit('messages:post-error');
+      this.server.emit('messages:post-error', id);
       return null;
     }
   }

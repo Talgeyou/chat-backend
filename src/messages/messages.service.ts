@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MessageCreateDTO, MessageWithUser } from './types';
 
@@ -22,5 +22,9 @@ export class MessagesService {
     });
 
     return createdMessage;
+  }
+
+  getMessages(): Promise<MessageWithUser[]> {
+    return this.prismaService.message.findMany({ include: { user: true } });
   }
 }
